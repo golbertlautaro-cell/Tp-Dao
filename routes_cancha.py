@@ -128,7 +128,6 @@ def create_cancha():
         tipo_deporte=data.get('tipo_deporte'),
         superficie=data.get('superficie'),
         precio_hora=data.get('precio_hora') or 0,
-        iluminacion=data.get('iluminacion'),
     )
     db.session.add(cancha)
     db.session.commit()
@@ -141,7 +140,7 @@ def update_cancha(id_cancha):
     cancha = Cancha.query.get_or_404(id_cancha)
     data = request.get_json() or {}
 
-    for field in ('nombre', 'tipo_deporte', 'superficie', 'precio_hora', 'iluminacion', 'activa'):
+    for field in ('nombre', 'tipo_deporte', 'superficie', 'precio_hora', 'activa'):
         if field in data:
             setattr(cancha, field, data.get(field))
 

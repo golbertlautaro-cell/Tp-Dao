@@ -121,6 +121,10 @@ def create_app(test_config=None):
             @app.route('/ui/reportes')
             def ui_reportes():
                 return render_template('reportes.html')
+            
+            @app.route('/ui/reservas')
+            def ui_reservas():
+                return render_template('reservas_admin.html')
 
             @app.route('/ui')
             def ui_index():
