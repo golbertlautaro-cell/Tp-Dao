@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Propuesta visual - ReservaCancha</title>
+    <link rel="stylesheet" href="/static/css/theme.css">
+  </head>
+  <body>
+    <header class="header">
+      <div class="container" style="display:flex;align-items:center;">
+        <div class="brand">
+          <div style="width:42px;height:42px;background:var(--color-primary);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700">RC</div>
+          <div class="title">ReservaCancha</div>
+        </div>
+        <nav style="margin-left:auto">
+          <a href="#" class="active">Reservas</a>
+          <a href="#">Canchas</a>
+          <a href="#">Clientes</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      <div style="display:flex;gap:20px;" class="columns">
+        <section style="flex:1;">
+          <div class="card">
+            <h3>Reservar cancha</h3>
+            <form>
+              <div class="form-row">
+                <label>Cliente</label>
+                <select class="form-control">
+                  <option>Juan Pérez (DNI 123...)</option>
+                </select>
+              </div>
+              <div class="form-row row">
+                <div class="col">
+                  <label>Cancha</label>
+                  <select class="form-control">
+                    <option>Cancha Central - Fútbol - Césped</option>
+                  </select>
+                </div>
+                <div class="col">
+                  <label>Fecha</label>
+                  <input type="date" class="form-control" />
+                </div>
+              </div>
+              <div class="form-row row">
+                <div class="col">
+                  <label>Hora inicio</label>
+                  <select class="form-control">
+                    <option>09:00</option>
+                    <option>10:00</option>
+                  </select>
+                </div>
+                <div class="col">
+                  <label>Hora fin</label>
+                  <input class="form-control" readonly value="10:00" />
+                </div>
+              </div>
+
+              <div style="margin-top:12px; display:flex; gap:8px;">
+                <button class="btn btn-primary">Reservar</button>
+                <button type="button" class="btn btn-outline">Limpiar</button>
+              </div>
+            </form>
+          </div>
+
+          <div style="margin-top:16px;" class="card">
+            <h3>Reservas del día</h3>
+            <div class="reservation-card">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div>
+                  <div style="font-weight:600">09:00 - 10:00</div>
+                  <div class="meta">Juan Pérez — Cancha Central</div>
+                </div>
+                <div>
+                  <span class="badge-status badge-pending">Pendiente</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="reservation-card">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <div>
+                  <div style="font-weight:600">10:00 - 11:00</div>
+                  <div class="meta">María López — Cancha 2</div>
+                </div>
+                <div>
+                  <span class="badge-status badge-confirmed">Confirmada</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <aside class="col-1">
+          <div class="card">
+            <h3>Resumen</h3>
+            <p class="text-muted">Hoy: <strong>2 reservas</strong></p>
+            <p class="text-muted">Ingresos estimados: <strong>$300</strong></p>
+          </div>
+
+          <div style="margin-top:16px;" class="card">
+            <h3>Acciones rápidas</h3>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <button class="btn btn-primary">Nueva reserva</button>
+              <button class="btn btn-outline">Exportar CSV</button>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <div style="margin-top:20px;" class="card">
+        <h3>Listado de reservas (tabla)</h3>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Cliente</th>
+              <th>Cancha</th>
+              <th>Fecha</th>
+              <th>Hora inicio</th>
+              <th>Hora fin</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>Juan Pérez</td>
+              <td>Cancha Central</td>
+              <td>2025-11-06</td>
+              <td>09:00</td>
+              <td>10:00</td>
+              <td><span class="badge-status badge-pending">Pendiente</span></td>
+              <td><button class="btn btn-outline">Editar</button> <button class="btn btn-danger">Eliminar</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </main>
+  </body>
+</html>

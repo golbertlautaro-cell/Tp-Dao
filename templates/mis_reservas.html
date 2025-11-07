@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mis Reservas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">🏟️ ReservaCancha</a>
+            <a href="/" class="btn btn-outline-light btn-sm">Volver al Inicio</a>
+        </div>
+    </nav>
+
+    <div class="container py-4">
+        <h1 class="mb-4">📋 Mis Reservas</h1>
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Ingresá tu ID de Cliente</label>
+                    <div class="input-group">
+                        <input type="number" id="id_cliente" class="form-control" placeholder="Ej: 1">
+                        <button class="btn btn-primary" onclick="cargarReservas()">Buscar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="reservas-container"></div>
+    </div>
+
+    <script>
+        async function cargarReservas() {
+            const idCliente = document.getElementById('id_cliente').value;
+            if (!idCliente) {
+                alert('Por favor ingresá tu ID de cliente');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/cliente/${idCliente}/reservas`);
+                const data = await response.json();
+
+                const container = document.getElementById('reservas-container');
+                
+                if (!response.ok) {
+                    container.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+                    return;
+                }
+
+                if (data.total === 0) {
+                    container.innerHTML = `<div class="alert alert-info">No tenés reservas aún</div>`;
+                    return;
+                }
+
+                let html = `<div class="card"><div class="card-body"><h5>Total de reservas: ${data.total}</h5><div class="table-responsive"><table class="table table-striped"><thead><tr><th>ID</th><th>Cancha</th><th>Fecha</th><th>Horario</th><th>Estado</th><th>Precio</th><th>Acciones</th></tr></thead><tbody>`;
+                
+                data.reservas.forEach(r => {
+                    const estadoClass = r.estado.nombre === 'Confirmada' ? 'success' : r.estado.nombre === 'Pendiente' ? 'warning' : 'danger';
+                    html += `
+                        <tr id="reserva-${r.id_reserva}">
+                            <td>${r.id_reserva}</td>
+                            <td>${r.cancha.nombre}</td>
+                            <td>${r.fecha_reserva}</td>
+                            <td>${r.hora_inicio} - ${r.hora_fin}</td>
+                            <td><span class="badge bg-${estadoClass}">${r.estado.nombre}</span></td>
+                            <td>$${r.precio_total}</td>
+                            <td>
+                                <button class="btn btn-danger btn-sm" onclick="eliminarReserva(${r.id_reserva}, '${r.cancha.nombre}', '${r.fecha_reserva}', '${r.hora_inicio}')">
+                                    🗑️ Eliminar
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                html += `</tbody></table></div></div></div>`;
+                container.innerHTML = html;
+
+            } catch (error) {
+                document.getElementById('reservas-container').innerHTML = `<div class="alert alert-danger">Error al cargar reservas</div>`;
+            }
+        }
+
+        async function eliminarReserva(idReserva, nombreCancha, fecha, hora) {
+            if (!confirm(`¿Estás seguro de eliminar esta reserva?\n\nCancha: ${nombreCancha}\nFecha: ${fecha}\nHora: ${hora}\n\nEsta acción no se puede deshacer.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/reservas/${idReserva}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    alert(`Error: ${data.error}`);
+                    return;
+                }
+
+                // Eliminar la fila de la tabla con animación
+                const fila = document.getElementById(`reserva-${idReserva}`);
+                fila.style.transition = 'opacity 0.5s';
+                fila.style.opacity = '0';
+                
+                setTimeout(() => {
+                    // Recargar las reservas para actualizar el contador
+                    cargarReservas();
+                    alert(`✅ ${data.mensaje}\n\nEl horario ya está disponible para nuevas reservas.`);
+                }, 500);
+
+            } catch (error) {
+                alert('Error al eliminar la reserva. Por favor intentá nuevamente.');
+                console.error('Error:', error);
+            }
+        }
+    </script>
+</body>
+</html>

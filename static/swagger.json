@@ -1,0 +1,561 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "API de Reservas de Canchas Deportivas - Sistema del Cliente",
+    "version": "1.0.0",
+    "description": "Sistema de gestión de reservas de canchas deportivas desde la perspectiva del cliente. Permite registrarse, ver canchas disponibles, hacer reservas, agregar servicios y gestionar pagos.",
+    "contact": {
+      "name": "Grupo G25",
+      "email": "grupo25@universidad.edu.ar"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5000",
+      "description": "Servidor local de desarrollo"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Cliente",
+      "description": "Gestión del perfil del cliente"
+    },
+    {
+      "name": "Canchas",
+      "description": "Consulta de canchas disponibles"
+    },
+    {
+      "name": "Reservas",
+      "description": "Gestión de reservas (crear, consultar, cancelar)"
+    },
+    {
+      "name": "Servicios",
+      "description": "Servicios adicionales disponibles"
+    },
+    {
+      "name": "Pagos",
+      "description": "Gestión de pagos y métodos de pago"
+    },
+    {
+      "name": "Reportes",
+      "description": "Estadísticas y reportes del cliente"
+    }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "summary": "Información de la API",
+        "tags": ["General"],
+        "responses": {
+          "200": {
+            "description": "Información básica de la API",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "mensaje": {"type": "string"},
+                    "version": {"type": "string"},
+                    "documentacion": {"type": "string"},
+                    "grupo": {"type": "string"}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/cliente/registro": {
+      "post": {
+        "summary": "Registrar nuevo cliente",
+        "description": "Permite a un nuevo usuario registrarse en el sistema como cliente",
+        "tags": ["Cliente"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["dni", "nombre", "apellido"],
+                "properties": {
+                  "dni": {"type": "string", "example": "12345678"},
+                  "nombre": {"type": "string", "example": "Juan"},
+                  "apellido": {"type": "string", "example": "Pérez"},
+                  "telefono": {"type": "string", "example": "1123456789"},
+                  "email": {"type": "string", "format": "email", "example": "juan@example.com"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Cliente registrado exitosamente"
+          },
+          "400": {
+            "description": "Faltan datos obligatorios"
+          },
+          "409": {
+            "description": "DNI o email ya registrado"
+          }
+        }
+      }
+    },
+    "/api/cliente/{id_cliente}": {
+      "get": {
+        "summary": "Obtener información del cliente",
+        "tags": ["Cliente"],
+        "parameters": [
+          {
+            "name": "id_cliente",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"},
+            "description": "ID del cliente"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Información del cliente"
+          },
+          "404": {
+            "description": "Cliente no encontrado"
+          }
+        }
+      },
+      "put": {
+        "summary": "Actualizar datos del cliente",
+        "tags": ["Cliente"],
+        "parameters": [
+          {
+            "name": "id_cliente",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nombre": {"type": "string"},
+                  "apellido": {"type": "string"},
+                  "telefono": {"type": "string"},
+                  "email": {"type": "string"}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Cliente actualizado"
+          },
+          "404": {
+            "description": "Cliente no encontrado"
+          }
+        }
+      }
+    },
+    "/api/canchas": {
+      "get": {
+        "summary": "Listar canchas disponibles",
+        "description": "Obtiene la lista de todas las canchas disponibles para reservar",
+        "tags": ["Canchas"],
+        "parameters": [
+          {
+            "name": "tipo_deporte",
+            "in": "query",
+            "required": false,
+            "schema": {"type": "string"},
+            "description": "Filtrar por tipo de deporte (Fútbol, Paddle, Tenis, etc.)"
+          },
+          {
+            "name": "activa",
+            "in": "query",
+            "required": false,
+            "schema": {"type": "boolean", "default": true},
+            "description": "Filtrar solo canchas activas"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de canchas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "total": {"type": "integer"},
+                    "canchas": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Cancha"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/canchas/{id_cancha}": {
+      "get": {
+        "summary": "Detalle de una cancha",
+        "tags": ["Canchas"],
+        "parameters": [
+          {
+            "name": "id_cancha",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Información detallada de la cancha"
+          },
+          "404": {
+            "description": "Cancha no encontrada"
+          }
+        }
+      }
+    },
+    "/api/canchas/{id_cancha}/disponibilidad": {
+      "get": {
+        "summary": "Verificar disponibilidad de cancha",
+        "description": "Verifica si una cancha está disponible en una fecha y horario específico",
+        "tags": ["Canchas"],
+        "parameters": [
+          {
+            "name": "id_cancha",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          },
+          {
+            "name": "fecha",
+            "in": "query",
+            "required": true,
+            "schema": {"type": "string", "format": "date"},
+            "example": "2024-11-15"
+          },
+          {
+            "name": "hora_inicio",
+            "in": "query",
+            "required": true,
+            "schema": {"type": "string", "format": "time"},
+            "example": "14:00"
+          },
+          {
+            "name": "hora_fin",
+            "in": "query",
+            "required": true,
+            "schema": {"type": "string", "format": "time"},
+            "example": "15:00"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado de disponibilidad"
+          }
+        }
+      }
+    },
+    "/api/reservas": {
+      "post": {
+        "summary": "Crear nueva reserva",
+        "description": "El cliente crea una nueva reserva de cancha",
+        "tags": ["Reservas"],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["id_cliente", "id_cancha", "fecha_reserva", "hora_inicio", "hora_fin"],
+                "properties": {
+                  "id_cliente": {"type": "integer", "example": 1},
+                  "id_cancha": {"type": "integer", "example": 2},
+                  "fecha_reserva": {"type": "string", "format": "date", "example": "2024-11-15"},
+                  "hora_inicio": {"type": "string", "example": "14:00"},
+                  "hora_fin": {"type": "string", "example": "15:00"},
+                  "servicios_adicionales": {
+                    "type": "array",
+                    "items": {"type": "integer"},
+                    "example": [1, 2]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Reserva creada exitosamente"
+          },
+          "400": {
+            "description": "Datos inválidos"
+          },
+          "409": {
+            "description": "Horario no disponible"
+          }
+        }
+      }
+    },
+    "/api/cliente/{id_cliente}/reservas": {
+      "get": {
+        "summary": "Listar reservas del cliente",
+        "description": "Obtiene todas las reservas realizadas por el cliente",
+        "tags": ["Reservas"],
+        "parameters": [
+          {
+            "name": "id_cliente",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          },
+          {
+            "name": "estado",
+            "in": "query",
+            "required": false,
+            "schema": {"type": "string", "enum": ["Pendiente", "Confirmada", "Cancelada"]}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de reservas del cliente"
+          }
+        }
+      }
+    },
+    "/api/reservas/{id_reserva}": {
+      "get": {
+        "summary": "Detalle de una reserva",
+        "tags": ["Reservas"],
+        "parameters": [
+          {
+            "name": "id_reserva",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Detalles completos de la reserva"
+          }
+        }
+      }
+    },
+    "/api/reservas/{id_reserva}/cancelar": {
+      "put": {
+        "summary": "Cancelar reserva",
+        "description": "El cliente cancela su propia reserva",
+        "tags": ["Reservas"],
+        "parameters": [
+          {
+            "name": "id_reserva",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reserva cancelada exitosamente"
+          },
+          "400": {
+            "description": "La reserva ya está cancelada"
+          }
+        }
+      }
+    },
+    "/api/servicios": {
+      "get": {
+        "summary": "Listar servicios adicionales",
+        "description": "Obtiene todos los servicios adicionales disponibles",
+        "tags": ["Servicios"],
+        "responses": {
+          "200": {
+            "description": "Lista de servicios"
+          }
+        }
+      }
+    },
+    "/api/reservas/{id_reserva}/servicios": {
+      "post": {
+        "summary": "Agregar servicio a reserva",
+        "tags": ["Servicios"],
+        "parameters": [
+          {
+            "name": "id_reserva",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["id_servicio"],
+                "properties": {
+                  "id_servicio": {"type": "integer"},
+                  "cantidad": {"type": "integer", "default": 1}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Servicio agregado"
+          }
+        }
+      }
+    },
+    "/api/metodos-pago": {
+      "get": {
+        "summary": "Listar métodos de pago",
+        "tags": ["Pagos"],
+        "responses": {
+          "200": {
+            "description": "Lista de métodos de pago disponibles"
+          }
+        }
+      }
+    },
+    "/api/reservas/{id_reserva}/pago": {
+      "post": {
+        "summary": "Registrar pago",
+        "description": "El cliente registra un pago para su reserva",
+        "tags": ["Pagos"],
+        "parameters": [
+          {
+            "name": "id_reserva",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["id_metodo", "monto"],
+                "properties": {
+                  "id_metodo": {"type": "integer", "example": 1},
+                  "monto": {"type": "number", "format": "decimal", "example": 5000.00}
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Pago registrado"
+          }
+        }
+      }
+    },
+    "/api/cliente/{id_cliente}/pagos": {
+      "get": {
+        "summary": "Historial de pagos del cliente",
+        "tags": ["Pagos"],
+        "parameters": [
+          {
+            "name": "id_cliente",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Historial de pagos"
+          }
+        }
+      }
+    },
+    "/api/cliente/{id_cliente}/estadisticas": {
+      "get": {
+        "summary": "Estadísticas del cliente",
+        "description": "Muestra estadísticas de uso: total de reservas, gasto total, cancha favorita, etc.",
+        "tags": ["Reportes"],
+        "parameters": [
+          {
+            "name": "id_cliente",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "integer"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estadísticas del cliente"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Cliente": {
+        "type": "object",
+        "properties": {
+          "id_cliente": {"type": "integer"},
+          "dni": {"type": "string"},
+          "nombre": {"type": "string"},
+          "apellido": {"type": "string"},
+          "telefono": {"type": "string"},
+          "email": {"type": "string"},
+          "activo": {"type": "boolean"}
+        }
+      },
+      "Cancha": {
+        "type": "object",
+        "properties": {
+          "id_cancha": {"type": "integer"},
+          "nombre": {"type": "string"},
+          "tipo_deporte": {"type": "string"},
+          "superficie": {"type": "string"},
+          "precio_hora": {"type": "string"},
+          "tiene_iluminacion": {"type": "boolean"},
+          "activa": {"type": "boolean"}
+        }
+      },
+      "Reserva": {
+        "type": "object",
+        "properties": {
+          "id_reserva": {"type": "integer"},
+          "id_cliente": {"type": "integer"},
+          "id_cancha": {"type": "integer"},
+          "fecha_reserva": {"type": "string", "format": "date"},
+          "hora_inicio": {"type": "string"},
+          "hora_fin": {"type": "string"},
+          "precio_total": {"type": "string"},
+          "estado": {"type": "string"}
+        }
+      },
+      "ServicioAdicional": {
+        "type": "object",
+        "properties": {
+          "id_servicio": {"type": "integer"},
+          "nombre": {"type": "string"},
+          "descripcion": {"type": "string"},
+          "precio": {"type": "string"},
+          "activo": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Reservas - ABM</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  </head>
+  <body class="bg-light">
+    <div class="container py-4">
+  <h1 class="mb-4">Lista de reservas</h1>
+
+      <div class="card mb-4" id="reserva-form-card" style="display:none;">
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-8">
+              <form id="reserva-form">
+                <input type="hidden" id="editingId" value="">
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <label class="form-label">Cliente</label>
+                    <select id="select-cliente" class="form-select" required>
+                      <option value="">Seleccionar cliente...</option>
+                    </select>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">Cancha</label>
+                    <select id="select-cancha" class="form-select" required>
+                      <option value="">Seleccionar cancha...</option>
+                    </select>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">Fecha</label>
+                    <input type="date" id="fecha" class="form-control" required>
+                  </div>
+
+                  <!-- Reservas del día (se actualiza al cambiar cancha/fecha) -->
+                  <div class="col-12">
+                    <h6 class="mt-2">Reservas en la fecha seleccionada</h6>
+                    <div id="form-reservas-list" class="list-group mb-2"><small class="text-muted">Seleccione cancha y fecha para ver reservas</small></div>
+                  </div>
+
+                  <div class="col-md-6">
+                    <label class="form-label">Hora inicio</label>
+                    <select id="hora_inicio" class="form-select" required>
+                      <option value="">Seleccionar hora...</option>
+                    </select>
+                  </div>
+                  <div class="col-md-6">
+                    <label class="form-label">Hora fin</label>
+                    <input type="text" id="hora_fin" class="form-control" readonly placeholder="--:--">
+                  </div>
+
+                  <!-- Opción de iluminación eliminada del formulario -->
+
+                  <div class="col-12">
+                    <button class="btn btn-primary" id="btn-submit">Guardar cambios</button>
+                    <button type="button" class="btn btn-secondary" id="btn-reset">Limpiar</button>
+                  </div>
+                </div>
+              </form>
+            </div>
+            <!-- cancha info panel removed as requested -->
+          </div>
+        </div>
+      </div>
+
+  <div class="card" id="reservas-list-card">
+        <div class="card-body">
+          <h5 class="card-title">Lista de reservas</h5>
+          <div class="table-responsive">
+            <table class="table table-striped" id="reservas-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Cliente</th>
+                  <th>Cancha</th>
+                  <th>Deporte</th>
+                  <th>Superficie</th>
+                  <th>Fecha</th>
+                  <th>Hora inicio</th>
+                  <th>Hora fin</th>
+                  <!-- Columna Iluminación eliminada -->
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <script>
+      const API_RESERVAS = '/api/reservas';
+      const API_CLIENTES = '/api/clientes';
+      const API_CANCHAS = '/api/canchas';
+
+      async function fetchJson(url){
+        try{ const res = await fetch(url); if(!res.ok) return null; return await res.json(); }catch(e){ return null; }
+      }
+
+  async function loadSelects(){
+        const clientes = await fetchJson(API_CLIENTES+'?all=true') || [];
+        // traer todas las canchas para poder mapear datos, pero solo mostrar activas en el select
+        const canchas_all = await fetchJson(API_CANCHAS+'?all=true') || [];
+        const selCliente = document.getElementById('select-cliente');
+        clientes.forEach(c=>{ const opt=document.createElement('option'); opt.value=c.id_cliente; opt.textContent=`${c.nombre} ${c.apellido} (${c.dni})`; selCliente.appendChild(opt); });
+        const selCancha = document.getElementById('select-cancha');
+        // poblar el select con etiqueta combinada para TODAS las canchas (marcando inactivas)
+        canchas_all.forEach(c=>{
+          const opt=document.createElement('option');
+          opt.value=c.id_cancha;
+          const deporte = (c.tipo_deporte || '').toString();
+          const sup = (c.superficie || '').toString();
+          const inactiveTag = c.activa ? '' : ' (inactiva)';
+          opt.textContent = `${c.nombre} - ${deporte} - ${sup}${inactiveTag}`;
+          // opcional: deshabilitar las opciones inactivas para que no puedan seleccionarse en creación
+          if(!c.activa){ opt.dataset.inactiva = '1'; opt.disabled = true; }
+          selCancha.appendChild(opt);
+        });
+        // guardar mapa de canchas en window para uso en loadReservas
+        window._canchas_map = {};
+        canchas_all.forEach(c=>{ window._canchas_map[c.id_cancha] = c; });
+
+        const selHora = document.getElementById('hora_inicio');
+        for(let h=9; h<=22; h++){ const hh=String(h).padStart(2,'0')+':00'; const opt=document.createElement('option'); opt.value=hh; opt.textContent=hh; selHora.appendChild(opt); }
+        selHora.addEventListener('change', ()=>{ const v=selHora.value; if(!v){document.getElementById('hora_fin').value=''; return;} const h=parseInt(v.split(':')[0],10); document.getElementById('hora_fin').value=String(h+1).padStart(2,'0')+':00'; });
+      }
+
+  async function loadReservas(){
+        const res = await fetch(API_RESERVAS);
+        const data = await res.json();
+        const tbody = document.querySelector('#reservas-table tbody');
+        tbody.innerHTML='';
+        // ensure we have canchas map
+        const canchas_all = window._canchas_map ? Object.values(window._canchas_map) : (await fetchJson(API_CANCHAS+'?all=true')) || [];
+        const cmap = {};
+        canchas_all.forEach(c=>{ cmap[c.id_cancha] = c; });
+        data.forEach(r=>{
+          const cancha = cmap[r.id_cancha];
+          const tr=document.createElement('tr');
+          tr.innerHTML = `
+            <td>${r.id_reserva}</td>
+            <td>${r.cliente_nombre || r.id_cliente}</td>
+            <td>${cancha ? cancha.nombre : r.id_cancha}</td>
+            <td>${cancha ? (cancha.tipo_deporte || '') : ''}</td>
+            <td>${cancha ? (cancha.superficie || '') : ''}</td>
+            <td>${r.fecha_reserva}</td>
+            <td>${r.hora_inicio}</td>
+            <td>${r.hora_fin}</td>
+            <!-- Iluminación eliminada del listado -->
+            <td>
+              <button class="btn btn-sm btn-primary btn-edit" data-id="${r.id_reserva}">Modificar</button>
+              <button class="btn btn-sm btn-danger btn-delete" data-id="${r.id_reserva}">Eliminar</button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+        document.querySelectorAll('.btn-edit').forEach(b=>b.addEventListener('click', onEdit));
+        document.querySelectorAll('.btn-delete').forEach(b=>b.addEventListener('click', onDelete));
+      }
+
+        // Cargar reservas para el formulario de edición (cancha + fecha)
+        async function loadReservasForForm(){
+          const container = document.getElementById('form-reservas-list');
+          container.innerHTML = '';
+          const idCancha = document.getElementById('select-cancha').value;
+          const fecha = document.getElementById('fecha').value;
+          if(!idCancha || !fecha){
+            container.innerHTML = '<small class="text-muted">Seleccione cancha y fecha para ver reservas</small>';
+            return;
+          }
+          const res = await fetch(`${API_RESERVAS}?id_cancha=${idCancha}&fecha_reserva=${fecha}`);
+          if(!res.ok){ container.innerHTML = '<small class="text-muted">No se pudieron cargar las reservas</small>'; return; }
+          const data = await res.json();
+          if(!data || data.length === 0){
+            container.innerHTML = '<div class="list-group-item text-muted">No hay reservas para la fecha seleccionada</div>';
+            return;
+          }
+          data.forEach(r=>{
+            const item = document.createElement('div');
+            item.className = 'list-group-item d-flex justify-content-between align-items-center';
+            item.textContent = `${r.hora_inicio} - ${r.hora_fin} — ${r.cliente_nombre || ''} ${r.cliente_apellido || ''} (ID: ${r.id_reserva})`;
+            container.appendChild(item);
+          });
+        }
+
+      async function onEdit(e){
+        const id = e.target.dataset.id;
+        const res = await fetch(API_RESERVAS+'/'+id);
+        const r = await res.json();
+        document.getElementById('editingId').value = r.id_reserva;
+        document.getElementById('select-cliente').value = r.id_cliente;
+        // si la cancha no está en el select (p. ej. inactiva), agregarla temporalmente con etiqueta completa
+        const selCancha = document.getElementById('select-cancha');
+        if(!Array.from(selCancha.options).some(o=>o.value == r.id_cancha)){
+          const c = window._canchas_map && window._canchas_map[r.id_cancha];
+          const deporte = c ? (c.tipo_deporte || '') : '';
+          const sup = c ? (c.superficie || '') : '';
+          const inactiveTag = (c && !c.activa) ? ' (inactiva)' : '';
+          const label = c ? `${c.nombre} - ${deporte} - ${sup}${inactiveTag}` : `Cancha ${r.id_cancha}`;
+          const opt = document.createElement('option'); opt.value = r.id_cancha; opt.textContent = label; selCancha.appendChild(opt);
+        }
+        document.getElementById('select-cancha').value = r.id_cancha;
+        document.getElementById('fecha').value = r.fecha_reserva;
+        document.getElementById('hora_inicio').value = r.hora_inicio;
+  document.getElementById('hora_fin').value = r.hora_fin;
+        // mostrar el formulario para editar
+        const card = document.getElementById('reserva-form-card');
+    if(card) card.style.display = 'block';
+    // ocultar la lista principal para mostrar solo el bloque de edición
+    const listCard = document.getElementById('reservas-list-card'); if(listCard) listCard.style.display = 'none';
+    // cargar reservas del día para la cancha/fecha seleccionada
+    setTimeout(()=>{ loadReservasForForm(); }, 80);
+        document.getElementById('btn-submit').textContent = 'Guardar cambios';
+      }
+
+      async function onDelete(e){
+        const id = e.target.dataset.id;
+        if(!confirm('¿Eliminar reserva?')) return;
+        await fetch(API_RESERVAS+'/'+id, { method: 'DELETE' });
+        await loadReservas();
+      }
+
+      document.getElementById('reserva-form').addEventListener('submit', async function(ev){
+        ev.preventDefault();
+        const id = document.getElementById('editingId').value;
+        // client-side guard: la fecha no puede ser anterior a hoy
+        const fechaVal = document.getElementById('fecha').value;
+        if(fechaVal){
+          const today = new Date().toISOString().split('T')[0];
+          if(fechaVal < today){
+            alert('La fecha de la reserva no puede ser anterior a la fecha actual.');
+            return;
+          }
+        }
+        const payload = {
+          id_cliente: parseInt(document.getElementById('select-cliente').value),
+          id_cancha: parseInt(document.getElementById('select-cancha').value),
+          fecha_reserva: document.getElementById('fecha').value,
+          hora_inicio: document.getElementById('hora_inicio').value,
+          hora_fin: document.getElementById('hora_fin').value,
+          // iluminación eliminada
+        };
+        let res;
+        if(id){
+          res = await fetch(API_RESERVAS+'/'+id, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        } else {
+          res = await fetch(API_RESERVAS, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        }
+        if(res.ok){ resetForm(); loadReservas(); } else { const err = await res.json(); alert(err.error || 'Error'); }
+      });
+
+      function resetForm(){
+        document.getElementById('editingId').value='';
+        document.getElementById('reserva-form').reset();
+        document.getElementById('hora_fin').value='';
+        // ocultar el formulario nuevamente
+        const card = document.getElementById('reserva-form-card');
+        if(card) card.style.display = 'none';
+        document.getElementById('btn-submit').textContent = 'Guardar cambios';
+        // ocultar info de cancha y volver a mostrar listado
+        const ci = document.getElementById('cancha-info'); if(ci) ci.style.display='none';
+        const listCard = document.getElementById('reservas-list-card'); if(listCard) listCard.style.display='block';
+      }
+
+      document.getElementById('btn-reset').addEventListener('click', resetForm);
+
+      // init
+      loadSelects();
+      loadReservas();
+      // bloquear selección de fechas pasadas en el formulario de edición
+      (function(){
+        const fechaEl = document.getElementById('fecha');
+        if(fechaEl){
+          const today = new Date().toISOString().split('T')[0];
+          fechaEl.setAttribute('min', today);
+        }
+      })();
+  // cuando el usuario cambia cancha o fecha en el formulario, actualizar la lista dentro del formulario
+  const selCanchaForm = document.getElementById('select-cancha');
+  const fechaForm = document.getElementById('fecha');
+  if(selCanchaForm){ selCanchaForm.addEventListener('change', ()=>{ const card = document.getElementById('reserva-form-card'); if(card && card.style.display==='block') loadReservasForForm(); }); }
+  if(fechaForm){ fechaForm.addEventListener('change', ()=>{ const card = document.getElementById('reserva-form-card'); if(card && card.style.display==='block') loadReservasForForm(); }); }
+      // actualizar panel de info de cancha cuando el usuario cambia la selección
+      (function(){
+        const sel = document.getElementById('select-cancha');
+        if(sel){
+          sel.addEventListener('change', function(){
+            const v = this.value;
+            if(!v){ const ci = document.getElementById('cancha-info'); if(ci) ci.style.display='none'; return; }
+            showCanchaInfo(parseInt(v,10));
+          });
+        }
+      })();
+      // Si se pasa ?edit=<id> en la URL, cargar esa reserva en el formulario y mostrarlo
+      (function(){
+        try{
+          const params = new URLSearchParams(window.location.search);
+          const editId = params.get('edit');
+          if(editId){
+            // esperar a que selects estén cargados brevemente
+            setTimeout(async ()=>{
+              const res = await fetch(API_RESERVAS+'/'+editId);
+              if(!res.ok) return;
+              const r = await res.json();
+              document.getElementById('editingId').value = r.id_reserva;
+              document.getElementById('select-cliente').value = r.id_cliente;
+              // si la cancha es inactiva y no está en el select, agregarla temporalmente
+              const selCancha = document.getElementById('select-cancha');
+              if(!Array.from(selCancha.options).some(o=>o.value == r.id_cancha)){
+                const c = window._canchas_map && window._canchas_map[r.id_cancha];
+                const label = c ? `${c.nombre} (inactiva)` : `Cancha ${r.id_cancha}`;
+                const opt = document.createElement('option'); opt.value = r.id_cancha; opt.textContent = label; selCancha.appendChild(opt);
+              }
+              document.getElementById('select-cancha').value = r.id_cancha;
+              document.getElementById('fecha').value = r.fecha_reserva;
+              document.getElementById('hora_inicio').value = r.hora_inicio;
+              document.getElementById('hora_fin').value = r.hora_fin;
+              const card = document.getElementById('reserva-form-card'); if(card) card.style.display = 'block';
+              // show cancha info and hide listado
+              showCanchaInfo(r.id_cancha);
+            }, 300);
+          }
+        }catch(e){ /* no crítico */ }
+      })();
+      // Si se pasa ?edit=<id> en la URL, cargar esa reserva en el formulario
+      (function(){
+        try{
+          const params = new URLSearchParams(window.location.search);
+          const editId = params.get('edit');
+          if(editId){
+            // esperar a que selects estén cargados brevemente
+            setTimeout(async ()=>{
+              const res = await fetch(API_RESERVAS+'/'+editId);
+              if(!res.ok) return;
+              const r = await res.json();
+              document.getElementById('editingId').value = r.id_reserva;
+              document.getElementById('select-cliente').value = r.id_cliente;
+              document.getElementById('select-cancha').value = r.id_cancha;
+              document.getElementById('fecha').value = r.fecha_reserva;
+              document.getElementById('hora_inicio').value = r.hora_inicio;
+              document.getElementById('hora_fin').value = r.hora_fin;
+            }, 400);
+          }
+        }catch(e){ /* no crítico */ }
+      })();
+    </script>
+  </body>
+</html>

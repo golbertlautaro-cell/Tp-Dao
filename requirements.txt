@@ -1,2 +1,12 @@
-Flask
-Flask-SQLAlchemy
+# Trabajo Práctico Integrador - DAO
+# Dependencias necesarias para el sistema de reservas
+
+# Framework web principal
+Flask>=3.0.0
+
+# ORM para manejo de base de datos
+Flask-SQLAlchemy>=3.1.1
+SQLAlchemy>=2.0.35
+
+# Utilidades adicionales (opcional pero recomendado)
+python-dotenv>=1.0.0

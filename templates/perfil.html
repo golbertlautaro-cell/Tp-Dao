@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Mi Perfil</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">🏟️ ReservaCancha</a>
+            <a href="/" class="btn btn-outline-light btn-sm">Volver al Inicio</a>
+        </div>
+    </nav>
+
+    <div class="container py-4">
+        <h1 class="mb-4">👤 Mi Perfil</h1>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Ingresá tu ID de Cliente</label>
+                    <div class="input-group">
+                        <input type="number" id="id_cliente" class="form-control" placeholder="Ej: 1">
+                        <button class="btn btn-primary" onclick="cargarPerfil()">Buscar</button>
+                    </div>
+                </div>
+                <div id="perfil-container"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function cargarPerfil() {
+            const idCliente = document.getElementById('id_cliente').value;
+            if (!idCliente) {
+                alert('Por favor ingresá tu ID de cliente');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/cliente/${idCliente}`);
+                const cliente = await response.json();
+
+                if (!response.ok) {
+                    document.getElementById('perfil-container').innerHTML = `<div class="alert alert-danger">${cliente.error}</div>`;
+                    return;
+                }
+
+                document.getElementById('perfil-container').innerHTML = `
+                    <div class="mt-4">
+                        <h5>Información Personal</h5>
+                        <table class="table">
+                            <tr><th>ID Cliente:</th><td>${cliente.id_cliente}</td></tr>
+                            <tr><th>DNI:</th><td>${cliente.dni}</td></tr>
+                            <tr><th>Nombre:</th><td>${cliente.nombre} ${cliente.apellido}</td></tr>
+                            <tr><th>Email:</th><td>${cliente.email || 'No especificado'}</td></tr>
+                            <tr><th>Teléfono:</th><td>${cliente.telefono || 'No especificado'}</td></tr>
+                            <tr><th>Estado:</th><td><span class="badge bg-${cliente.activo ? 'success' : 'danger'}">${cliente.activo ? 'Activo' : 'Inactivo'}</span></td></tr>
+                        </table>
+                        <a href="/ui/mis-reservas" class="btn btn-primary">Ver Mis Reservas</a>
+                    </div>
+                `;
+
+            } catch (error) {
+                document.getElementById('perfil-container').innerHTML = `<div class="alert alert-danger">Error al cargar perfil</div>`;
+            }
+        }
+    </script>
+</body>
+</html>
