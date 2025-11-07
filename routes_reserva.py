@@ -8,6 +8,7 @@ from models import (
     EstadoReserva,
     ServicioAdicional,
     ReservaServicio,
+    Pago,
     Partido,
 )
 from datetime import datetime, date as _date
@@ -48,6 +49,9 @@ def create_reserva():
     # rango permitido: 09:00 - 23:00 (hora inicio >= 9, hora fin <= 23)
     if hora_inicio.hour < 9 or hora_fin.hour > 23:
         return jsonify({'error': 'Horario fuera de rango. Las reservas sólo pueden realizarse entre 09:00 y 23:00.'}), 400
+    # La fecha de reserva no puede ser anterior al día de hoy
+    if fecha_reserva < _date.today():
+        return jsonify({'error': 'La fecha de la reserva no puede ser anterior a la fecha actual.'}), 400
     # duración EXACTA de 1 hora
     if (dt_end - dt_start).total_seconds() != 3600:
         return jsonify({'error': 'La reserva debe tener una duración EXACTA de 1 hora (ej. 09:00-10:00).'}), 400
@@ -109,14 +113,8 @@ def create_reserva():
     precio_base = Decimal(cancha.precio_hora or Decimal('0'))
     total = (precio_base * duration_hours)
 
-    # Iluminación: si el cliente solicita iluminación sumamos el recargo por hora
-    usa_iluminacion = bool(data.get('usa_iluminacion', False))
-    iluminacion_cost = Decimal('0')
-    if usa_iluminacion:
-        # usar precio_iluminacion definido en la cancha si existe, sino 0
-        precio_ilum = Decimal(cancha.precio_iluminacion or Decimal('0'))
-        iluminacion_cost = (precio_ilum * duration_hours)
-        total += iluminacion_cost
+    # Iluminación: opción removida del UI — siempre False en backend por compatibilidad
+    usa_iluminacion = False
 
     # Crear la reserva con estado por defecto
     reserva = Reserva(
@@ -135,15 +133,53 @@ def create_reserva():
     # Procesar servicios adicionales (lista de objetos con id_servicio y cantidad opcional)
     servicios = data.get('servicios_adicionales') or []
     for s in servicios:
-        sid = s.get('id_servicio') if isinstance(s, dict) else s
-        cantidad = int(s.get('cantidad', 1)) if isinstance(s, dict) else 1
-        svc = ServicioAdicional.query.get(sid)
-        if not svc or not svc.activo:
-            db.session.rollback()
-            return jsonify({'error': f'Servicio adicional inválido: {sid}'}), 400
+        # soportamos dos formatos:
+        # - id numérico (referencia a ServicioAdicional existente)
+        # - objeto { nombre: str, precio: number, cantidad: int } — creamos o buscamos el servicio y lo asociamos
+        if isinstance(s, dict):
+            cantidad = int(s.get('cantidad', 1))
+            sid = s.get('id_servicio')
+            if sid:
+                svc = ServicioAdicional.query.get(sid)
+                if not svc or not svc.activo:
+                    db.session.rollback()
+                    return jsonify({'error': f'Servicio adicional inválido: {sid}'}), 400
+            else:
+                # servicio dinámico enviado desde el frontend: buscar por nombre (case-insensitive) o crear uno nuevo
+                nombre = (s.get('nombre') or '').strip()
+                if not nombre:
+                    db.session.rollback()
+                    return jsonify({'error': 'Servicio adicional con nombre vacío'}), 400
+                precio_raw = s.get('precio')
+                try:
+                    precio_decimal = Decimal(str(precio_raw)) if precio_raw is not None else Decimal('0')
+                except Exception:
+                    db.session.rollback()
+                    return jsonify({'error': f'Precio inválido para servicio {nombre}'}), 400
+
+                svc = ServicioAdicional.query.filter(ServicioAdicional.nombre.ilike(nombre)).first()
+                if not svc:
+                    svc = ServicioAdicional(nombre=nombre, precio_adicional=precio_decimal, activo=True)
+                    db.session.add(svc)
+                    db.session.flush()  # obtener id_servicio
+                # Note: si existe svc con distinto precio, usamos el precio registrado en la tabla para facturación
+        else:
+            # valor simple: id de servicio
+            cantidad = 1
+            try:
+                sid = int(s)
+            except Exception:
+                db.session.rollback()
+                return jsonify({'error': f'Servicio adicional inválido: {s}'}), 400
+            svc = ServicioAdicional.query.get(sid)
+            if not svc or not svc.activo:
+                db.session.rollback()
+                return jsonify({'error': f'Servicio adicional inválido: {sid}'}), 400
+
+        # asociar servicio a la reserva
         rs = ReservaServicio(id_reserva=reserva.id_reserva, id_servicio=svc.id_servicio, cantidad=cantidad)
         db.session.add(rs)
-        # sumar precio
+        # sumar precio usando el precio guardado en la tabla (o el creado recientemente)
         total += (Decimal(svc.precio_adicional) * Decimal(cantidad))
 
     reserva.precio_total = total.quantize(Decimal('0.01'))
@@ -185,6 +221,23 @@ def list_reservas():
             'usa_iluminacion': bool(r.usa_iluminacion),
         })
     return jsonify(out)
+
+
+@bp.route('/<int:id_reserva>', methods=['GET'])
+def get_reserva(id_reserva):
+    r = Reserva.query.get_or_404(id_reserva)
+    return jsonify({
+        'id_reserva': r.id_reserva,
+        'id_cliente': r.id_cliente,
+        'cliente_nombre': getattr(r.cliente, 'nombre', None),
+        'cliente_apellido': getattr(r.cliente, 'apellido', None),
+        'id_cancha': r.id_cancha,
+        'fecha_reserva': r.fecha_reserva.isoformat(),
+        'hora_inicio': r.hora_inicio.strftime('%H:%M'),
+        'hora_fin': r.hora_fin.strftime('%H:%M'),
+        'precio_total': str(r.precio_total),
+        'usa_iluminacion': bool(r.usa_iluminacion),
+    })
 
 
 @bp.route('/check', methods=['GET'])
@@ -256,3 +309,104 @@ def check_disponibilidad():
         return jsonify({'available': False, 'reason': 'PARTIDOS: Ya existe un partido en ese horario para la cancha seleccionada'}), 200
 
     return jsonify({'available': True}), 200
+
+
+@bp.route('/<int:id_reserva>', methods=['PUT'])
+def update_reserva(id_reserva):
+    reserva = Reserva.query.get_or_404(id_reserva)
+    data = request.get_json() or {}
+    try:
+        # permitir cambiar cliente, cancha, fecha y horas (mismo formato que create)
+        id_cliente = int(data.get('id_cliente', reserva.id_cliente))
+        id_cancha = int(data.get('id_cancha', reserva.id_cancha))
+        fecha_reserva = date_from_str(data.get('fecha_reserva')) if data.get('fecha_reserva') else reserva.fecha_reserva
+        hora_inicio = time_from_str(data.get('hora_inicio')) if data.get('hora_inicio') else reserva.hora_inicio
+        hora_fin = time_from_str(data.get('hora_fin')) if data.get('hora_fin') else reserva.hora_fin
+    except Exception:
+        return jsonify({'error': 'Campos inválidos o formato incorrecto. fecha: YYYY-MM-DD, horas: HH:MM'}), 400
+
+    if hora_inicio >= hora_fin:
+        return jsonify({'error': 'hora_inicio debe ser anterior a hora_fin'}), 400
+
+    # Validaciones: en punto, duración 1h, rango 09-23 (inicio 09-22)
+    if hora_inicio.minute != 0 or hora_fin.minute != 0:
+        return jsonify({'error': 'Las horas deben ser en punto (MM=00)'}), 400
+    dt_start = datetime.combine(fecha_reserva, hora_inicio)
+    dt_end = datetime.combine(fecha_reserva, hora_fin)
+    if (dt_end - dt_start).total_seconds() != 3600:
+        return jsonify({'error': 'La reserva debe durar exactamente 1 hora'}), 400
+    if hora_inicio.hour < 9 or hora_inicio.hour > 22 or hora_fin.hour > 23:
+        return jsonify({'error': 'Horario fuera del rango permitido (inicio 09-22, fin <=23)'}), 400
+
+    # No permitir mover/crear una reserva a una fecha pasada
+    if fecha_reserva < _date.today():
+        return jsonify({'error': 'La fecha de la reserva no puede ser anterior a la fecha actual.'}), 400
+
+    # verificar cliente y cancha
+    cliente = Cliente.query.get(id_cliente)
+    if not cliente or not cliente.activo:
+        return jsonify({'error': 'Cliente no existe o no está activo'}), 400
+    cancha = Cancha.query.get(id_cancha)
+    if not cancha or not cancha.activa:
+        return jsonify({'error': 'Cancha no existe o no está activa'}), 400
+
+    # verificar horarios definidos para cancha
+    horarios = HorarioDisponible.query.filter_by(id_cancha=id_cancha).all()
+    if horarios:
+        weekday_es = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'][fecha_reserva.weekday()]
+        ok = False
+        for h in horarios:
+            if h.dia_semana and h.dia_semana.lower() != weekday_es.lower():
+                continue
+            if (h.hora_inicio <= hora_inicio) and (h.hora_fin >= hora_fin) and h.disponible:
+                ok = True
+                break
+        if not ok:
+            return jsonify({'error': 'La cancha no tiene un horario disponible que cubra el intervalo solicitado'}), 409
+
+    # verificar solapamientos con otras reservas (excluir la actual)
+    overlapping = Reserva.query.filter(
+        Reserva.id_cancha == id_cancha,
+        Reserva.fecha_reserva == fecha_reserva,
+        Reserva.hora_fin > hora_inicio,
+        Reserva.hora_inicio < hora_fin,
+        Reserva.id_reserva != id_reserva,
+    ).first()
+    if overlapping:
+        return jsonify({'error': 'Ya existe una reserva en ese horario para la cancha seleccionada'}), 409
+
+    # verificar solapamientos con partidos
+    partido_overlap = Partido.query.filter(
+        Partido.id_cancha == id_cancha,
+        Partido.fecha_partido == fecha_reserva,
+        Partido.hora_fin > hora_inicio,
+        Partido.hora_inicio < hora_fin,
+    ).first()
+    if partido_overlap:
+        return jsonify({'error': 'Ya existe un partido en ese horario para la cancha seleccionada'}), 409
+
+    # aplicar cambios
+    reserva.id_cliente = id_cliente
+    reserva.id_cancha = id_cancha
+    reserva.fecha_reserva = fecha_reserva
+    reserva.hora_inicio = hora_inicio
+    reserva.hora_fin = hora_fin
+    # Iluminación removida de UI: no se acepta/actualiza desde el payload
+
+    db.session.commit()
+    return jsonify({'message': 'Reserva actualizada', 'id_reserva': reserva.id_reserva})
+
+
+@bp.route('/<int:id_reserva>', methods=['DELETE'])
+def delete_reserva(id_reserva):
+    reserva = Reserva.query.get_or_404(id_reserva)
+    try:
+        # eliminar servicios y pagos asociados
+        ReservaServicio.query.filter_by(id_reserva=id_reserva).delete()
+        Pago.query.filter_by(id_reserva=id_reserva).delete()
+        db.session.delete(reserva)
+        db.session.commit()
+        return jsonify({'message': 'Reserva eliminada'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': 'Error al eliminar reserva', 'details': str(e)}), 500
